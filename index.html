@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Truck Marketplace Professional Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/polyline/0.2.0/polyline.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; background: #ecf0f1; }
+        .navbar { 
+            padding: 15px; background: #2c3e50; color: white; 
+            display: flex; flex-wrap: wrap; gap: 15px; align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        }
+        .search-group { display: flex; gap: 10px; }
+        .options-group { display: flex; gap: 15px; font-size: 13px; border-left: 1px solid #7f8c8d; padding-left: 15px; }
+        input[type="text"] { padding: 10px; border-radius: 4px; border: none; width: 180px; }
+        label { cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        button { 
+            padding: 10px 18px; cursor: pointer; border: none; border-radius: 4px; 
+            font-weight: bold; transition: background 0.2s; 
+        }
+        #calcBtn { background: #27ae60; color: white; }
+        #pdfBtn { background: #e74c3c; color: white; }
+        #clearBtn { background: #7f8c8d; color: white; }
+        #map { height: calc(100vh - 85px); width: 100%; }
+    </style>
+</head>
+<body>
+
+    <div class="navbar">
+        <div class="search-group">
+            <input type="text" id="startAddr" placeholder="Origin Address">
+            <input type="text" id="endAddr" placeholder="Destination">
+        </div>
+
+        <div class="options-group">
+            <label><input type="checkbox" id="avoidTolls"> Avoid Tolls</label>
+            <label><input type="checkbox" id="avoidHighways"> Avoid Highways</label>
+            <span style="color:#bdc3c7">| Specs: 13'6" / 80k lbs / HAZMAT</span>
+        </div>
+
+        <button id="calcBtn" onclick="runTruckFlow()">Calculate Route</button>
+        <button id="pdfBtn" style="display:none;" onclick="generatePDF()">Download PDF</button>
+        <button id="clearBtn" onclick="clearMap()">Clear</button>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // 1. CONFIGURATION
+        const SERVER_IP = "46.224.51.200"; 
+        const map = L.map('map').setView([39.8283, -98.5795], 4);
+        
+        // Base Layers
+        const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+        
+        // Live Traffic Overlay
+        const traffic = L.tileLayer('https://{s}.tile.openstreetmap.org/hot/{z}/{x}/{y}.png', {
+            opacity: 0.5,
+            attribution: 'Traffic data via OSM'
+        });
+
+        // Default to Streets View
+        streets.addTo(map);
+
+        // Map Controls
+        const baseMaps = { "Street Map": streets, "Satellite": satellite };
+        const overlays = { "Live Traffic": traffic };
+        L.control.layers(baseMaps, overlays).addTo(map);
+
+        let routeLayer;
+        let lastTripData = null;
+
+        // 2. GEOCODING
+        async function getCoords(address) {
+            const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`);
+            const data = await resp.json();
+            if (data.features && data.features.length > 0) {
+                const [lon, lat] = data.features[0].geometry.coordinates;
+                return { lat, lon };
+            }
+            throw new Error(`Location not found: ${address}`);
+        }
+
+        // 3. ROUTING LOGIC
+        async function runTruckFlow() {
+            const btn = document.getElementById('calcBtn');
+            try {
+                btn.innerText = "Routing...";
+                const start = await getCoords(document.getElementById('startAddr').value);
+                const end = await getCoords(document.getElementById('endAddr').value);
+
+                const requestBody = {
+                    locations: [start, end],
+                    costing: "truck",
+                    costing_options: {
+                        truck: {
+                            height: 4.11, // Standard Metric Height
+                            weight: 36.28, // Standard Metric Tons
+                            hazmat: true,
+                            use_tolls: document.getElementById('avoidTolls').checked ? 0.0 : 1.0,
+                            use_highways: document.getElementById('avoidHighways').checked ? 0.0 : 1.0
+                        }
+                    },
+                    directions_options: { units: "miles" }
+                };
+
+                const response = await fetch(`http://${SERVER_IP}:8002/route`, {
+                    method: 'POST',
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                if (!data.trip) throw new Error("Route unavailable for these truck specs.");
+
+                lastTripData = data.trip;
+                document.getElementById('pdfBtn').style.display = 'inline';
+                
+                const coords = polyline.decode(data.trip.legs[0].shape, 6);
+                if (routeLayer) map.removeLayer(routeLayer);
+                routeLayer = L.polyline(coords, {color: '#d35400', weight: 6, opacity: 0.9}).addTo(map);
+                map.fitBounds(routeLayer.getBounds());
+                
+                alert(`Route Calculated: ${data.trip.summary.length.toFixed(1)} miles`);
+
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.innerText = "Calculate Route";
+            }
+        }
+
+        // 4. PDF EXPORT
+        function generatePDF() {
+            if (!lastTripData) return;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFontSize(18);
+            doc.text("Professional Driver Manifest", 14, 20);
+            doc.setFontSize(10);
+            doc.text(`Truck: 13'6" | 80k lbs | HAZMAT-Safe`, 14, 28);
+            doc.text(`Distance: ${lastTripData.summary.length.toFixed(1)} miles`, 14, 34);
+
+            const rows = lastTripData.legs[0].maneuvers.map(m => [m.instruction, `${m.length.toFixed(1)} mi`]);
+            doc.autoTable({ startY: 40, head: [['Instruction', 'Dist']], body: rows, theme: 'striped' });
+            doc.save(`Truck_Route_${Date.now()}.pdf`);
+        }
+
+        // 5. CLEAR
+        function clearMap() {
+            if (routeLayer) map.removeLayer(routeLayer);
+            routeLayer = null; lastTripData = null;
+            document.getElementById('pdfBtn').style.display = 'none';
+            document.getElementById('startAddr').value = "";
+            document.getElementById('endAddr').value = "";
+            map.setView([39.8283, -98.5795], 4);
+        }
+    </script>
+</body>
+</html>
