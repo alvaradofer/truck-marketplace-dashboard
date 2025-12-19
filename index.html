@@ -2,61 +2,95 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>HelloTruck Pro Dashboard</title>
+    <title>HelloTruck Pro</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; display: flex; font-family: 'Segoe UI', sans-serif; }
-        .sidebar { width: 320px; background: #2c3e50; color: white; padding: 20px; box-sizing: border-box; overflow-y: auto; z-index: 10; box-shadow: 2px 0 10px rgba(0,0,0,0.3); }
-        #map { flex-grow: 1; height: 100%; position: relative; background: #cbdbe5; }
-        h2 { margin: 0 0 15px 0; border-bottom: 1px solid #7f8c8d; padding-bottom: 10px; }
-        .input-group { margin-bottom: 15px; position: relative; }
-        label { display: block; font-size: 12px; margin-bottom: 5px; color: #bdc3c7; }
-        input { width: 100%; padding: 10px; border-radius: 4px; border: none; box-sizing: border-box; background: #34495e; color: white; }
-        .suggestions { position: absolute; top: 100%; left: 0; right: 0; background: white; color: black; z-index: 2000; border-radius: 4px; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .suggestion-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 13px; }
-        .suggestion-item:hover { background: #eee; }
-        button { width: 100%; padding: 12px; margin-top: 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
-        #calcBtn { background: #27ae60; } #calcBtn:hover { background: #219150; }
-        #pdfBtn { background: #e74c3c; display: none; }
-        #statusMsg { margin-top:15px; color:#f1c40f; font-weight: bold; }
+        /* 1. LAYOUT FIX: Forces the sidebar and map to fill the screen perfectly */
+        body { margin: 0; padding: 0; display: flex; height: 100vh; font-family: sans-serif; overflow: hidden; }
+        
+        .sidebar { 
+            width: 320px; 
+            min-width: 320px; 
+            background: #2c3e50; 
+            color: white; 
+            padding: 20px; 
+            overflow-y: auto; 
+            display: flex; 
+            flex-direction: column;
+            gap: 15px;
+            z-index: 2000; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+        }
+
+        #map { 
+            flex-grow: 1; 
+            height: 100%; 
+            width: 100%;
+            background: #e5e9ec; /* Grey placeholder color */
+        }
+
+        /* Input Styling */
+        label { font-size: 12px; color: #bdc3c7; display: block; margin-bottom: 5px; }
+        input[type="text"], input[type="number"] { 
+            width: 100%; padding: 10px; border: none; border-radius: 4px; 
+            background: #34495e; color: white; box-sizing: border-box; 
+        }
+
+        /* Suggestion Dropdown Styling */
+        .input-wrapper { position: relative; }
+        .suggestions { 
+            position: absolute; top: 100%; left: 0; right: 0; 
+            background: white; color: black; z-index: 3000; 
+            max-height: 150px; overflow-y: auto; display: none; 
+            border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 13px; }
+
+        /* Buttons */
+        button { 
+            width: 100%; padding: 12px; border: none; border-radius: 4px; 
+            font-weight: bold; color: white; cursor: pointer; 
+        }
+        .btn-green { background: #27ae60; }
+        .btn-red { background: #e74c3c; display: none; }
+        
+        #status { color: #f1c40f; font-weight: bold; font-size: 14px; min-height: 20px; }
     </style>
 </head>
 <body>
 
     <div class="sidebar">
-        <h2>Route Planner</h2>
-        
-        <div class="input-group">
+        <h2 style="margin:0; border-bottom:1px solid #7f8c8d; padding-bottom:10px;">Route Planner</h2>
+
+        <div class="input-wrapper">
             <label>Origin</label>
-            <input type="text" id="startAddr" placeholder="Type to search..." autocomplete="off">
+            <input type="text" id="start" placeholder="Start City..." oninput="search(this, 'startList')" autocomplete="off">
             <div id="startList" class="suggestions"></div>
         </div>
-        
-        <div class="input-group">
+
+        <div class="input-wrapper">
             <label>Destination</label>
-            <input type="text" id="endAddr" placeholder="Type to search..." autocomplete="off">
+            <input type="text" id="end" placeholder="End City..." oninput="search(this, 'endList')" autocomplete="off">
             <div id="endList" class="suggestions"></div>
         </div>
 
-        <div class="input-group">
+        <div>
             <label>Truck Height (Feet)</label>
-            <input type="number" id="truckHeight" value="13.5" step="0.1">
+            <input type="number" id="height" value="13.5">
         </div>
 
-        <div class="input-group">
-            <label>Gross Weight (Lbs)</label>
-            <input type="number" id="truckWeight" value="80000">
+        <div>
+            <label>Truck Weight (Lbs)</label>
+            <input type="number" id="weight" value="80000">
         </div>
 
-        <div style="display:flex; align-items:center; gap:10px; font-size:14px;">
-            <input type="checkbox" id="isHazmat" checked style="width:auto;"> 
-            <label>HAZMAT Route</label>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <input type="checkbox" id="hazmat" checked style="width:auto;"> <label style="margin:0; color:white;">HAZMAT</label>
         </div>
 
-        <button id="calcBtn">Calculate Route</button>
-        <button id="pdfBtn">Download Driver PDF</button>
-        
-        <div id="statusMsg"></div>
+        <button class="btn-green" onclick="getRoute()">Calculate Route</button>
+        <button id="pdfBtn" class="btn-red" onclick="makePDF()">Download PDF</button>
+        <div id="status"></div>
     </div>
 
     <div id="map"></div>
@@ -67,98 +101,123 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
     <script>
-        // LOAD PROTECTOR
+        // --- GLOBAL VARIABLES ---
+        let map, routeLayer, lastTrip;
+        let points = { start: null, end: null };
+        let timer;
+        const API_URL = "https://hellotruck-api.duckdns.org/route";
+
+        // --- 1. INITIALIZE MAP (With Safety Delay) ---
         window.onload = function() {
-            const map = L.map('map').setView([39.82, -98.57], 4);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            setTimeout(() => {
+                map = L.map('map').setView([39.82, -98.57], 4);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+                // CRITICAL FIX: Tells map to fill the div correctly
+                map.invalidateSize(); 
+                console.log("Map Initialized");
+            }, 500); 
+        };
+
+        // --- 2. SEARCH / AUTOCOMPLETE ---
+        async function search(input, listId) {
+            const list = document.getElementById(listId);
+            if (input.value.length < 3) { list.style.display = 'none'; return; }
             
-            // Force map to fill the container correctly
-            setTimeout(() => { map.invalidateSize(); }, 500);
+            clearTimeout(timer);
+            timer = setTimeout(async () => {
+                const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(input.value)}&limit=5`);
+                const data = await res.json();
+                
+                list.innerHTML = '';
+                if (data.features) {
+                    list.style.display = 'block';
+                    data.features.forEach(f => {
+                        const div = document.createElement('div');
+                        div.className = 'item';
+                        div.innerText = [f.properties.name, f.properties.city, f.properties.state].filter(Boolean).join(', ');
+                        
+                        div.onclick = () => {
+                            input.value = div.innerText;
+                            list.style.display = 'none';
+                            // Save Coordinate
+                            const coords = { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
+                            if (listId === 'startList') points.start = coords;
+                            else points.end = coords;
+                        };
+                        list.appendChild(div);
+                    });
+                }
+            }, 300);
+        }
 
-            const SERVER = "hellotruck-api.duckdns.org";
-            let routeLayer, lastTripData, timer;
-            let selectedPoints = { start: null, end: null };
-
-            // AUTOCOMPLETE
-            function setupAutocomplete(inputId, listId) {
-                const input = document.getElementById(inputId);
-                const list = document.getElementById(listId);
-
-                input.addEventListener('input', () => {
-                    if (input.value.length < 3) { list.style.display = 'none'; return; }
-                    clearTimeout(timer);
-                    timer = setTimeout(async () => {
-                        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(input.value)}&limit=5`);
-                        const d = await r.json();
-                        list.innerHTML = '';
-                        if (d.features) {
-                            list.style.display = 'block';
-                            d.features.forEach(f => {
-                                const div = document.createElement('div');
-                                div.className = 'suggestion-item';
-                                const name = [f.properties.name, f.properties.city, f.properties.state].filter(Boolean).join(', ');
-                                div.innerText = name;
-                                div.onclick = () => {
-                                    input.value = name;
-                                    list.style.display = 'none';
-                                    selectedPoints[inputId === 'startAddr' ? 'start' : 'end'] = { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
-                                };
-                                list.appendChild(div);
-                            });
-                        }
-                    }, 300);
-                });
+        // --- 3. GET ROUTE (The "Brain") ---
+        async function getRoute() {
+            const status = document.getElementById('status');
+            
+            if (!points.start || !points.end) {
+                alert("Please select start and end cities from the dropdown list.");
+                return;
             }
 
-            setupAutocomplete('startAddr', 'startList');
-            setupAutocomplete('endAddr', 'endList');
+            status.innerText = "Routing...";
+            
+            try {
+                // Convert Units
+                const h = parseFloat(document.getElementById('height').value) * 0.3048; // Feet to Meters
+                const w = parseFloat(document.getElementById('weight').value) * 0.000453592; // Lbs to Tons
+                
+                const body = {
+                    locations: [points.start, points.end],
+                    costing: "truck",
+                    costing_options: {
+                        truck: { height: h, weight: w, hazmat: document.getElementById('hazmat').checked }
+                    },
+                    directions_options: { units: "miles" }
+                };
 
-            // ROUTING
-            document.getElementById('calcBtn').onclick = async function() {
-                if (!selectedPoints.start || !selectedPoints.end) { alert("Select locations from dropdown."); return; }
-                const status = document.getElementById('statusMsg');
-                status.innerText = "Querying Engine...";
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(body)
+                });
 
-                try {
-                    const hMeters = parseFloat(document.getElementById('truckHeight').value) * 0.3048;
-                    const wTons = parseFloat(document.getElementById('truckWeight').value) * 0.000453592;
+                const data = await res.json();
+                if (!data.trip) throw new Error("No route found.");
 
-                    const body = {
-                        locations: [selectedPoints.start, selectedPoints.end],
-                        costing: "truck",
-                        costing_options: { truck: { height: hMeters, weight: wTons, hazmat: document.getElementById('isHazmat').checked } },
-                        directions_options: { units: "miles" }
-                    };
+                lastTrip = data.trip;
+                status.innerText = `Success: ${data.trip.summary.length.toFixed(1)} miles`;
+                document.getElementById('pdfBtn').style.display = 'block';
 
-                    const response = await fetch(`https://${SERVER}/route`, { method: 'POST', body: JSON.stringify(body) });
-                    const data = await response.json();
-                    if (!data.trip) throw new Error("No route.");
+                // --- 4. DRAW LINE (High Precision Fix) ---
+                if (typeof polyline !== 'undefined') {
+                    // Valhalla uses precision 6. Standard decode is 5. We must specify 6.
+                    const linePoints = polyline.decode(data.trip.legs[0].shape, 6);
                     
-                    lastTripData = data.trip;
-                    document.getElementById('pdfBtn').style.display = 'block';
-                    status.innerText = `Success: ${data.trip.summary.length.toFixed(1)} miles`;
-
-                    // FIX POLYLINE PRECISION
-                    const raw = polyline.decode(data.trip.legs[0].shape, 6);
                     if (routeLayer) map.removeLayer(routeLayer);
-                    routeLayer = L.polyline(raw, {color: '#e67e22', weight: 6}).addTo(map);
+                    
+                    routeLayer = L.polyline(linePoints, { color: '#e67e22', weight: 6 }).addTo(map);
                     map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+                } else {
+                    alert("Error: Polyline library did not load. Please refresh the page.");
+                }
 
-                } catch (e) { status.innerText = "Error drawing route."; console.error(e); }
-            };
+            } catch (err) {
+                console.error(err);
+                status.innerText = "Error: Could not calculate route.";
+            }
+        }
 
-            // PDF
-            document.getElementById('pdfBtn').onclick = function() {
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF();
-                doc.text("HelloTruck Plan", 14, 20);
-                const rows = lastTripData.legs[0].maneuvers.map(m => [m.instruction, `${m.length.toFixed(1)} mi`]);
-                doc.autoTable({ startY: 30, head: [['Direction', 'Dist']], body: rows });
-                doc.save("HelloTruck_Route.pdf");
-            };
-        };
+        // --- 5. MAKE PDF ---
+        function makePDF() {
+            if (!lastTrip) return;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("Truck Routing Report", 14, 20);
+            const rows = lastTrip.legs[0].maneuvers.map(m => [m.instruction, `${m.length.toFixed(1)} mi`]);
+            doc.autoTable({ startY: 30, head: [['Instruction', 'Dist']], body: rows });
+            doc.save("Trip_Plan.pdf");
+        }
     </script>
 </body>
 </html>
-
-        
+        .item:hover { background: #f1f1f1; }
