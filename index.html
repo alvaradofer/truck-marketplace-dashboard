@@ -5,146 +5,142 @@
     <title>HelloTruck Pro Dashboard</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-        .app-container { display: flex; height: 100vh; width: 100vw; }
-        .sidebar { width: 320px; background: #2c3e50; color: white; padding: 20px; box-sizing: border-box; overflow-y: auto; z-index: 10; }
-        #map { flex-grow: 1; height: 100%; background: #cbdbe5; }
-        h2 { margin-top: 0; border-bottom: 1px solid #7f8c8d; padding-bottom: 10px; font-family: sans-serif; }
-        .input-group { margin-bottom: 15px; position: relative; font-family: sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; display: flex; font-family: 'Segoe UI', sans-serif; }
+        .sidebar { width: 320px; background: #2c3e50; color: white; padding: 20px; box-sizing: border-box; overflow-y: auto; z-index: 10; box-shadow: 2px 0 10px rgba(0,0,0,0.3); }
+        #map { flex-grow: 1; height: 100%; position: relative; background: #cbdbe5; }
+        h2 { margin: 0 0 15px 0; border-bottom: 1px solid #7f8c8d; padding-bottom: 10px; }
+        .input-group { margin-bottom: 15px; position: relative; }
         label { display: block; font-size: 12px; margin-bottom: 5px; color: #bdc3c7; }
         input { width: 100%; padding: 10px; border-radius: 4px; border: none; box-sizing: border-box; background: #34495e; color: white; }
         .suggestions { position: absolute; top: 100%; left: 0; right: 0; background: white; color: black; z-index: 2000; border-radius: 4px; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         .suggestion-item { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 13px; }
         .suggestion-item:hover { background: #eee; }
-        button { width: 100%; padding: 12px; margin-top: 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; }
-        #calcBtn { background: #27ae60; }
+        button { width: 100%; padding: 12px; margin-top: 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
+        #calcBtn { background: #27ae60; } #calcBtn:hover { background: #219150; }
         #pdfBtn { background: #e74c3c; display: none; }
-        #statusMsg { margin-top:15px; color:#f1c40f; font-weight: bold; font-family: sans-serif; }
+        #statusMsg { margin-top:15px; color:#f1c40f; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="app-container">
+
     <div class="sidebar">
         <h2>Route Planner</h2>
+        
         <div class="input-group">
             <label>Origin</label>
             <input type="text" id="startAddr" placeholder="Start city..." oninput="suggest(this, 'startList')">
             <div id="startList" class="suggestions"></div>
         </div>
+        
         <div class="input-group">
             <label>Destination</label>
             <input type="text" id="endAddr" placeholder="End city..." oninput="suggest(this, 'endList')">
             <div id="endList" class="suggestions"></div>
         </div>
+
         <div class="input-group">
             <label>Truck Height (Feet)</label>
             <input type="number" id="truckHeight" value="13.5" step="0.1">
         </div>
+
         <div class="input-group">
             <label>Gross Weight (Lbs)</label>
             <input type="number" id="truckWeight" value="80000">
         </div>
-        <div style="display:flex; align-items:center; gap:10px; font-family:sans-serif; font-size:14px;">
-            <input type="checkbox" id="isHazmat" checked style="width:auto;"> <label>HAZMAT Route</label>
+
+        <div style="display:flex; align-items:center; gap:10px; font-size:14px;">
+            <input type="checkbox" id="isHazmat" checked style="width:auto;"> 
+            <label>HAZMAT Route</label>
         </div>
+
         <button id="calcBtn" onclick="runTruckFlow()">Calculate Route</button>
         <button id="pdfBtn" onclick="generatePDF()">Download Driver PDF</button>
+        
         <div id="statusMsg"></div>
     </div>
-    <div id="map"></div>
-</div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/polyline/0.2.0/polyline.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/polyline/0.2.0/polyline.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
-<script>
-    const map = L.map('map').setView([39.82, -98.57], 4);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    <script>
+        const map = L.map('map').setView([39.82, -98.57], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        setTimeout(() => { map.invalidateSize(); }, 400);
 
-    // Fix map rendering issues
-    setTimeout(() => { map.invalidateSize(); }, 500);
+        const SERVER = "hellotruck-api.duckdns.org";
+        let routeLayer, lastTripData, selectedPoints = { start: null, end: null }, timer;
 
-    const SERVER = "hellotruck-api.duckdns.org";
-    let routeLayer, lastTripData, selectedPoints = { start: null, end: null }, timer;
-
-    async function suggest(input, listId) {
-        const list = document.getElementById(listId);
-        if (input.value.length < 3) { list.style.display='none'; return; }
-        clearTimeout(timer);
-        timer = setTimeout(async () => {
-            const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(input.value)}&limit=5`);
-            const d = await r.json();
-            list.innerHTML = '';
-            if (d.features) {
-                list.style.display = 'block';
-                d.features.forEach(f => {
-                    const div = document.createElement('div');
-                    div.className = 'suggestion-item';
-                    const name = [f.properties.name, f.properties.city, f.properties.state].filter(Boolean).join(', ');
-                    div.innerText = name;
-                    div.onclick = () => {
-                        input.value = name;
-                        list.style.display = 'none';
-                        // Valhalla uses {lat, lon}, Photon uses [lon, lat]
-                        const p = { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
-                        if (listId === 'startList') selectedPoints.start = p; else selectedPoints.end = p;
-                    };
-                    list.appendChild(div);
-                });
-            }
-        }, 300);
-    }
-
-    async function runTruckFlow() {
-        if (!selectedPoints.start || !selectedPoints.end) { alert("Please select locations from the dropdown."); return; }
-        const status = document.getElementById('statusMsg');
-        status.innerText = "Processing Route...";
-
-        try {
-            const hMeters = parseFloat(document.getElementById('truckHeight').value) * 0.3048;
-            const wTons = parseFloat(document.getElementById('truckWeight').value) * 0.000453592;
-
-            const body = {
-                locations: [selectedPoints.start, selectedPoints.end],
-                costing: "truck",
-                costing_options: { 
-                    truck: { height: hMeters, weight: wTons, hazmat: document.getElementById('isHazmat').checked } 
-                },
-                directions_options: { units: "miles" }
-            };
-
-            const response = await fetch(`https://${SERVER}/route`, { method: 'POST', body: JSON.stringify(body) });
-            const data = await response.json();
-            
-            if (!data.trip) throw new Error("No route found.");
-            
-            lastTripData = data.trip;
-            document.getElementById('pdfBtn').style.display = 'block';
-            status.innerText = `Success: ${data.trip.summary.length.toFixed(1)} miles`;
-
-            // DECODE AND FIX COORDINATES
-            const rawCoords = polyline.decode(data.trip.legs[0].shape, 6);
-            // Leaflet needs [Lat, Lon]. Sometimes decoders get these backwards.
-            if (routeLayer) map.removeLayer(routeLayer);
-            routeLayer = L.polyline(rawCoords, {color: '#e67e22', weight: 6}).addTo(map);
-            map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
-
-        } catch (e) { 
-            status.innerText = "Error: Map could not draw route.";
-            console.error(e);
+        async function suggest(input, listId) {
+            const list = document.getElementById(listId);
+            if (input.value.length < 3) { list.style.display='none'; return; }
+            clearTimeout(timer);
+            timer = setTimeout(async () => {
+                const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(input.value)}&limit=5`);
+                const d = await r.json();
+                list.innerHTML = '';
+                if (d.features) {
+                    list.style.display = 'block';
+                    d.features.forEach(f => {
+                        const div = document.createElement('div');
+                        div.className = 'suggestion-item';
+                        const name = [f.properties.name, f.properties.city, f.properties.state].filter(Boolean).join(', ');
+                        div.innerText = name;
+                        div.onclick = () => {
+                            input.value = name;
+                            list.style.display = 'none';
+                            selectedPoints[listId === 'startList' ? 'start' : 'end'] = { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] };
+                        };
+                        list.appendChild(div);
+                    });
+                }
+            }, 300);
         }
-    }
 
-    function generatePDF() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        doc.text("HelloTruck Trip Plan", 14, 20);
-        const rows = lastTripData.legs[0].maneuvers.map(m => [m.instruction, `${m.length.toFixed(1)} mi`]);
-        doc.autoTable({ startY: 30, head: [['Instruction', 'Distance']], body: rows });
-        doc.save("Driver_Report.pdf");
-    }
-</script>
+        async function runTruckFlow() {
+            if (!selectedPoints.start || !selectedPoints.end) { alert("Select locations from dropdown."); return; }
+            const status = document.getElementById('statusMsg');
+            status.innerText = "Querying Engine...";
+
+            try {
+                const hMeters = parseFloat(document.getElementById('truckHeight').value) * 0.3048;
+                const wTons = parseFloat(document.getElementById('truckWeight').value) * 0.000453592;
+
+                const body = {
+                    locations: [selectedPoints.start, selectedPoints.end],
+                    costing: "truck",
+                    costing_options: { truck: { height: hMeters, weight: wTons, hazmat: document.getElementById('isHazmat').checked } },
+                    directions_options: { units: "miles" }
+                };
+
+                const response = await fetch(`https://${SERVER}/route`, { method: 'POST', body: JSON.stringify(body) });
+                const data = await response.json();
+                if (!data.trip) throw new Error("No route found.");
+                
+                lastTripData = data.trip;
+                document.getElementById('pdfBtn').style.display = 'block';
+                status.innerText = `Success: ${data.trip.summary.length.toFixed(1)} miles`;
+
+                // CORRECT DECODING
+                // Valhalla uses precision 6. Standard polyline.decode defaults to 5.
+                const raw = polyline.decode(data.trip.legs[0].shape, 6);
+                if (routeLayer) map.removeLayer(routeLayer);
+                routeLayer = L.polyline(raw, {color: '#e67e22', weight: 6}).addTo(map);
+                map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+
+            } catch (e) { status.innerText = "Error drawing route."; console.error(e); }
+        }
+
+        function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("HelloTruck Plan", 14, 20);
+            const rows = lastTripData.legs[0].maneuvers.map(m => [m.instruction, `${m.length.toFixed(1)} mi`]);
+            doc.autoTable({ startY: 30, head: [['Direction', 'Dist']], body: rows });
+            doc.save("HelloTruck_Route.pdf");
+        }
+    </script>
 </body>
 </html>
+    <div id="map"></div>
